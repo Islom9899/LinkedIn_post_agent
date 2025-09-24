@@ -29,7 +29,7 @@ if st.button("포스트 생성하기"):
                 }
                 return await graph.ainvoke(initial_state)
             
-            final_state = asyncio.run(run_pipeline())
+            final_state = asyncio.get_event_loop().run_until_complete(run_pipeline())
             
             # 결과 출력
             st.subheader("✍️ 생성된 LinkedIn 포스트")
