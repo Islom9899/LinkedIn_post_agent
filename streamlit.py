@@ -3,7 +3,7 @@ import asyncio
 from concurrent.futures import ThreadPoolExecutor
 import functools
 
-from graph_builder import build_graph  # 그래프 빌더 모듈 임포트
+from graph_builder import build_graph  # 그래프 빌더 모듈
 
 # 페이지 설정
 st.set_page_config(page_title="AI LinkedIn 포스트 생성기", layout="wide")
@@ -33,13 +33,17 @@ if st.button("포스트 생성하기"):
                     "post_text": f"LinkedIn 포스트 주제: {topic}",  # 초기 텍스트
                     "image_path": ""  # 이미지 경로 초기화
                 }
-                return await graph.ainvoke(initial_state)  # 그래프 실행
+                # MCP graph 실행
+                return await graph.ainvoke(initial_state)
 
-            # 🔹 ThreadPoolExecutor 사용: Streamlit과 asyncio 충돌 방지
+            # 🔹 ThreadPoolExecutor 사용: Streamlit과 AnyIO TaskGroup 충돌 방지
             try:
+                # run_pipeline()을 별도 쓰레드에서 실행
+                def run_pipeline_threadsafe():
+                    return asyncio.run(run_pipeline())
+
                 with ThreadPoolExecutor() as executor:
-                    # run_pipeline()을 쓰레드에서 실행
-                    future = executor.submit(asyncio.run, run_pipeline())
+                    future = executor.submit(run_pipeline_threadsafe)
                     final_state = future.result()  # 결과 가져오기
 
                 # 결과 출력
@@ -49,5 +53,6 @@ if st.button("포스트 생성하기"):
                 if final_state.get("image_path"):
                     st.subheader("🖼️ 생성된 이미지")
                     st.image(final_state["image_path"], caption="AI가 생성한 이미지", use_column_width=True)
+
             except Exception as e:
-                st.error(f"⚠️ 포스트 생성 중 오류 발생: {e}")  # 오류 발생 시 출력
+                st.error(f"⚠️ 포스트 생성 중 오류 발생: {e}")  # 오류 발생 시 표시
