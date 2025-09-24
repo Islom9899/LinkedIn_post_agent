@@ -3,6 +3,9 @@ import streamlit as st
 import asyncio
 from graph_builder import build_graph
 
+HF_TOKEN = st.secrets["HF_TOKEN"]
+OUT_DIR = st.secrets.get("OUT_DIR", "outputs")
+
 st.set_page_config(page_title="AI LinkedIn 포스트 생성기", layout="wide")
 
 st.title("🚀 AI LinkedIn 포스트 생성기")
