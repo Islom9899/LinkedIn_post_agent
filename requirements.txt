@@ -11,3 +11,4 @@ transformers
 langgraph
 langchain-mcp-adapters
 pillow
+mcp
