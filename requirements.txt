@@ -1,0 +1,13 @@
+streamlit
+python-dotenv
+langchain
+langchain-openai
+langchain-community
+chromadb
+openai
+soundfile
+huggingface-hub
+transformers
+langgraph
+langchain-mcp-adapters
+pillow
