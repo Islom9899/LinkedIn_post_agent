@@ -1,6 +1,6 @@
 import os
 import asyncio
-import streamlit_app as st
+import streamlit as st
 from graph_builder import build_graph
 
 st.set_page_config(
@@ -55,4 +55,5 @@ if st.button("포스트 생성하기"):
 
             except Exception as e:
                 st.error(f"❌ 오류 발생: {e}")
+
 
