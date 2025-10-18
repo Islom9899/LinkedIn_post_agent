@@ -1,12 +1,9 @@
 # ============================================================
-# agent_logic.py — 실제 OpenAI API를 사용한 AI LinkedIn 포스트 생성기
+# agent_logic.py — 완전 작동형 LinkedIn 포스트 생성기
 # ============================================================
 """
-이 모듈은 LangGraph, LangChain, OpenAI API를 사용하여
-사용자가 입력한 주제(topic)에 맞는 LinkedIn 포스트 텍스트와 이미지를 생성합니다.
-
-Streamlit Cloud에서 실행 가능하며,
-환경 변수 OPENAI_API_KEY 가 반드시 설정되어 있어야 합니다.
+이 모듈은 LangGraph + LangChain + OpenAI API를 사용하여
+사용자가 입력한 주제에 맞는 LinkedIn 포스트 텍스트와 이미지를 생성합니다.
 """
 
 import os
@@ -20,17 +17,21 @@ from datetime import datetime
 from typing_extensions import TypedDict
 from dotenv import load_dotenv
 
-# LangGraph 및 LangChain 관련 모듈
+# ✅ LangGraph import
 from langgraph.graph import StateGraph
 try:
     from langgraph.constants import START, END
 except ImportError:
     START, END = "__start__", "__end__"
 
+# ✅ LangChain 최신 구조 반영
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_openai import ChatOpenAI
 from langchain.tools import tool
-from langchain.agents import AgentExecutor, create_openai_functions_agent
+# ✅ 변경된 import 위치
+from langchain.agents.executor import AgentExecutor
+from langchain.agents.openai import create_openai_functions_agent
+
 from openai import OpenAI
 
 load_dotenv()
@@ -46,7 +47,7 @@ class State(TypedDict):
     error: str
 
 
-# OpenAI LLM 초기화 (GPT-4o-mini 사용)
+# GPT-4o-mini 모델 사용
 llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.6)
 
 
@@ -100,13 +101,11 @@ def save_post_metadata(topic: str, post_text: str, image_path: str, error: str):
 
 
 # ============================================================
-# 3️⃣ 이미지 생성 툴 정의 (실제 OpenAI API 호출)
+# 3️⃣ 이미지 생성 툴 (실제 OpenAI API)
 # ============================================================
 @tool("image_generator")
 def generate_image_tool(prompt: str) -> str:
-    """
-    OpenAI DALL·E 3 모델을 사용해 이미지를 생성하고 로컬 파일로 저장.
-    """
+    """OpenAI DALL·E API를 통해 이미지를 생성"""
     api_key = os.environ.get("OPENAI_API_KEY")
     if not api_key:
         return "❌ OPENAI_API_KEY가 설정되어 있지 않습니다."
@@ -149,14 +148,14 @@ def generate_image_tool(prompt: str) -> str:
 # ============================================================
 post_prompt = ChatPromptTemplate.from_messages([
     ("system", "당신은 전문 LinkedIn 콘텐츠 작가입니다. "
-               "글은 전문적이면서 친근한 톤으로 작성하며, 이모지와 해시태그를 포함해야 합니다."),
+               "글은 전문적이면서도 친근한 톤으로 작성하며, 이모지와 해시태그를 포함해야 합니다."),
     ("human", "다음 주제에 대해 LinkedIn 포스트를 작성해 주세요:\n{topic}")
 ])
 post_chain = post_prompt | llm
 
 
 def post_node(state: State) -> dict:
-    """GPT-4o를 사용해 LinkedIn 포스트 텍스트를 생성하는 노드"""
+    """GPT-4o를 사용해 LinkedIn 포스트 텍스트를 생성"""
     try:
         response = post_chain.invoke({"topic": state["topic"]})
         return {"post_text": response.content.strip(), "error": ""}
@@ -165,13 +164,13 @@ def post_node(state: State) -> dict:
 
 
 def image_gen_node(state: State) -> dict:
-    """생성된 포스트를 기반으로 이미지를 생성하는 노드"""
+    """생성된 포스트를 기반으로 DALL·E 이미지를 생성"""
     try:
         tools = [generate_image_tool]
         agent_prompt = ChatPromptTemplate.from_messages([
-            ("system", "당신은 시각적으로 매력적인 LinkedIn 썸네일 이미지를 만드는 전문가입니다. "
+            ("system", "당신은 시각적으로 매력적인 LinkedIn 이미지를 설계하는 전문가입니다. "
                        "'image_generator' 도구만 사용할 수 있습니다. "
-                       "이미지 생성이 완료되면 오직 'Final Answer: [이미지 경로]' 형태로만 응답하세요."),
+                       "결과는 반드시 'Final Answer: [이미지 경로]' 형태로 응답하세요."),
             ("human", "다음 포스트 내용을 기반으로 이미지를 생성하세요:\n{input}"),
             MessagesPlaceholder(variable_name="agent_scratchpad"),
         ])
@@ -197,7 +196,7 @@ def image_gen_node(state: State) -> dict:
 # 5️⃣ 그래프 구성 및 실행
 # ============================================================
 def build_graph():
-    """LangGraph 그래프 빌드"""
+    """LangGraph 그래프 구성"""
     graph = StateGraph(State)
     graph.add_node("post", post_node)
     graph.add_node("image_gen", image_gen_node)
@@ -208,7 +207,7 @@ def build_graph():
 
 
 def run_workflow(initial_state: dict, progress_callback=None) -> dict:
-    """전체 워크플로우를 순차적으로 실행"""
+    """전체 워크플로우를 실행"""
     state: State = State(topic=initial_state.get("topic", ""), post_text="", image_path="", error="")
 
     try:
@@ -246,7 +245,7 @@ def run_workflow(initial_state: dict, progress_callback=None) -> dict:
 # 6️⃣ Mermaid 다이어그램 (시각화용)
 # ============================================================
 def mermaid_diagram() -> str:
-    """LangGraph의 워크플로우 구조를 Mermaid 코드로 반환"""
+    """워크플로우 구조를 Mermaid 다이어그램으로 반환"""
     return """```mermaid
 flowchart LR
     START --> Post[포스트 생성 노드\\n(GPT-4o)]
