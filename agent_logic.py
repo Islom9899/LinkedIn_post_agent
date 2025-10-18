@@ -124,7 +124,7 @@ def post_generator(state: State) -> dict:
 
 
 # ============================================================
-# 4️⃣ 이미지 생성 노드 (OpenAI DALL·E 3)
+# 4️⃣ 이미지 생성 노드 (OpenAI DALL·E 2)
 # ============================================================
 def image_generator(state: State) -> dict:
     """
@@ -140,7 +140,7 @@ def image_generator(state: State) -> dict:
 
         # 🧩 이미지 생성 요청
         response = client.images.generate(
-            model="gpt-image-1",
+            model="dall-e-2",
             prompt=prompt,
             size="1024x1024"
         )
@@ -241,5 +241,6 @@ flowchart LR
     POST --> IMAGE[이미지 생성 🎨]
     IMAGE --> END
 ```"""
+
 
 
