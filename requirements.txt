@@ -1,11 +1,8 @@
-# LangChain 및 OpenAI 라이브러리
 langchain>=0.3.27
-langchain_openai>=0.3.35
+langchain-openai>=0.1.0
 langgraph>=0.6.10
 openai>=2.3.0
 python-dotenv>=1.1.1
 requests>=2.32.5
-
-# 웹 인터페이스
 streamlit>=1.49.1
 typing_extensions>=4.15.0
