@@ -6,10 +6,21 @@ import re
 from datetime import datetime
 from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, START, END
-from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder # MessagesPlaceholder import qilindi
+# LangChain import compatibility across versions
+try:
+    # Newer LangChain versions (>=0.1) expose prompts via langchain_core
+    from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+except Exception:
+    # Fallback for older LangChain versions
+    from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder  # MessagesPlaceholder import qilindi
 from langchain_openai import ChatOpenAI
 from langchain.tools import tool
-from langchain.agents import AgentExecutor, create_openai_functions_agent
+# Agent creation compatibility across LangChain versions
+try:
+    from langchain.agents import AgentExecutor, create_openai_functions_agent
+except Exception:
+    # Newer versions renamed to create_openai_tools_agent
+    from langchain.agents import AgentExecutor, create_openai_tools_agent as create_openai_functions_agent
 from openai import OpenAI
 import requests
 from dotenv import load_dotenv
