@@ -6,7 +6,7 @@ import re
 from datetime import datetime
 from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, START, END
-from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder # MessagesPlaceholder import qilindi
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_openai import ChatOpenAI
 from langchain.tools import tool
 from langchain.agents import AgentExecutor, create_openai_functions_agent
@@ -300,4 +300,5 @@ flowchart LR
     Post --> Image[이미지 생성 노드\\n(DALL·E-3)]
     Image --> END
 ```"""
+
     return diagram
