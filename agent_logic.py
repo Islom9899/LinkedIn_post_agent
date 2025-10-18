@@ -8,15 +8,9 @@ import requests
 from datetime import datetime
 from typing import TypedDict
 from dotenv import load_dotenv
-
-# ✅ LangGraph 1.0
 from langgraph.graph import StateGraph, START, END
-
-# ✅ LangChain 1.0
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
-
-# ✅ OpenAI SDK (v2.x)
 from openai import OpenAI
 
 # .env 파일에서 OPENAI_API_KEY 등 환경 변수 불러오기
@@ -146,7 +140,7 @@ def image_generator(state: State) -> dict:
 
         # 🧩 이미지 생성 요청
         response = client.images.generate(
-            model="gpt-image-1",
+            model="dall-e-2",
             prompt=prompt,
             size="1024x1024"
         )
@@ -247,3 +241,4 @@ flowchart LR
     POST --> IMAGE[이미지 생성 🎨]
     IMAGE --> END
 ```"""
+
