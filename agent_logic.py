@@ -140,7 +140,7 @@ def image_generator(state: State) -> dict:
 
         # 🧩 이미지 생성 요청
         response = client.images.generate(
-            model="dall-e-2",
+            model="gpt-image-1",
             prompt=prompt,
             size="1024x1024"
         )
@@ -241,4 +241,5 @@ flowchart LR
     POST --> IMAGE[이미지 생성 🎨]
     IMAGE --> END
 ```"""
+
 
