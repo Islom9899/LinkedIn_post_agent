@@ -1,8 +1,13 @@
-langchain==0.1.17
-langchain_openai==0.0.5
-openai==1.30.1
-langgraph==0.0.45
-python-dotenv>=1.1.1
-requests>=2.32.5
-streamlit>=1.49.1
-typing_extensions>=4.15.0
+# Core AI stack (mos keladigan versiyalar)
+langchain==0.3.27
+langchain_openai==0.3.5
+langgraph==0.6.12
+openai==1.59.6
+
+# Qo‘shimcha
+python-dotenv>=1.0.1
+requests>=2.32.3
+typing_extensions>=4.12.2
+
+# UI
+streamlit==1.49.1
