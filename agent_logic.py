@@ -1,11 +1,3 @@
-# ============================================================
-# agent_logic.py — 완전 작동형 LinkedIn 포스트 생성기
-# ============================================================
-"""
-이 모듈은 LangGraph + LangChain + OpenAI API를 사용하여
-사용자가 입력한 주제에 맞는 LinkedIn 포스트 텍스트와 이미지를 생성합니다.
-"""
-
 import os
 import uuid
 import json
@@ -14,69 +6,71 @@ import re
 import base64
 import requests
 from datetime import datetime
-from typing_extensions import TypedDict
+from typing import TypedDict
 from dotenv import load_dotenv
 
-# ✅ LangGraph import
-from langgraph.graph import StateGraph
-try:
-    from langgraph.constants import START, END
-except ImportError:
-    START, END = "__start__", "__end__"
+# ✅ LangGraph 1.0
+from langgraph.graph import StateGraph, START, END
 
-# ✅ LangChain 최신 구조 반영
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+# ✅ LangChain 1.0
+from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
-from langchain.tools import tool
-# ✅ 변경된 import 위치
-from langchain.agents.executor import AgentExecutor
-from langchain.agents.openai import create_openai_functions_agent
 
+# ✅ OpenAI SDK (v2.x)
 from openai import OpenAI
 
+# .env 파일에서 OPENAI_API_KEY 등 환경 변수 불러오기
 load_dotenv()
+
 
 # ============================================================
 # 1️⃣ 상태(State) 정의
 # ============================================================
 class State(TypedDict):
-    """LangGraph 워크플로우에서 공유되는 상태(State) 구조체"""
-    topic: str
-    post_text: str
-    image_path: str
-    error: str
-
-
-# GPT-4o-mini 모델 사용
-llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.6)
+    """
+    LangGraph 워크플로우에서 노드 간에 전달되는 상태(State)를 정의합니다.
+    각 노드는 이 상태를 참조하거나 수정할 수 있습니다.
+    """
+    topic: str       # 사용자가 입력한 주제
+    post_text: str   # GPT가 생성한 LinkedIn 포스트 텍스트
+    image_path: str  # 생성된 이미지 파일 경로
+    error: str       # 에러 메시지 (있을 경우)
 
 
 # ============================================================
-# 2️⃣ 유틸리티 함수
+# 2️⃣ 유틸리티 함수 (보조 기능)
 # ============================================================
-def slugify(text: str, maxlen: int = 40) -> str:
-    """파일 이름에 안전한 문자열 형태로 변환"""
-    text = text.lower()
-    text = re.sub(r'[^a-z0-9\s-]', '', text)
-    text = re.sub(r'[\s-]+', '-', text).strip('-')
-    return text[:maxlen]
-
-
 def ensure_outputs():
-    """출력 폴더(outputs 및 하위 폴더)를 자동 생성"""
+    """
+    출력 결과를 저장할 폴더(outputs, images, posts)를 자동 생성합니다.
+    폴더가 이미 존재하면 아무 동작도 하지 않습니다.
+    """
     for folder in ["outputs", "outputs/images", "outputs/posts"]:
         os.makedirs(folder, exist_ok=True)
 
 
-def save_post_metadata(topic: str, post_text: str, image_path: str, error: str):
-    """생성된 포스트 및 관련 메타데이터를 JSON과 CSV로 저장"""
+def slugify(text: str) -> str:
+    """
+    파일 이름으로 사용 가능한 안전한 문자열(slug)을 만듭니다.
+    예: "AI 트렌드 2025" → "ai-트렌드-2025"
+    """
+    text = text.lower()
+    text = re.sub(r"[^a-z0-9\s-]", "", text)
+    text = re.sub(r"[\s-]+", "-", text).strip("-")
+    return text[:40]
+
+
+def save_metadata(topic: str, post_text: str, image_path: str, error: str):
+    """
+    생성된 포스트의 메타데이터를 JSON과 CSV로 저장합니다.
+    JSON: 개별 포스트별 세부 정보
+    CSV : 전체 생성 내역 인덱스
+    """
     ensure_outputs()
     timestamp = datetime.utcnow().isoformat() + "Z"
     uid = uuid.uuid4().hex[:8]
-    safe_topic = slugify(topic) or "untitled"
-    base_name = f"{safe_topic}_{uid}"
-    json_path = os.path.join("outputs", "posts", f"{base_name}.json")
-    csv_path = os.path.join("outputs", "posts", "posts_index.csv")
+    safe_name = slugify(topic) or "untitled"
+    base = os.path.join("outputs/posts", f"{safe_name}_{uid}")
 
     metadata = {
         "id": uid,
@@ -87,12 +81,15 @@ def save_post_metadata(topic: str, post_text: str, image_path: str, error: str):
         "timestamp": timestamp,
     }
 
-    with open(json_path, "w", encoding="utf-8") as f:
+    # ✅ JSON 파일 저장
+    with open(base + ".json", "w", encoding="utf-8") as f:
         json.dump(metadata, f, ensure_ascii=False, indent=2)
 
+    # ✅ CSV 인덱스 추가
+    csv_path = os.path.join("outputs/posts", "posts_index.csv")
     write_header = not os.path.exists(csv_path)
     with open(csv_path, "a", encoding="utf-8", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=list(metadata.keys()))
+        writer = csv.DictWriter(f, fieldnames=metadata.keys())
         if write_header:
             writer.writeheader()
         writer.writerow(metadata)
@@ -101,154 +98,152 @@ def save_post_metadata(topic: str, post_text: str, image_path: str, error: str):
 
 
 # ============================================================
-# 3️⃣ 이미지 생성 툴 (실제 OpenAI API)
+# 3️⃣ 포스트 생성 노드 (GPT-4o-mini 사용)
 # ============================================================
-@tool("image_generator")
-def generate_image_tool(prompt: str) -> str:
-    """OpenAI DALL·E API를 통해 이미지를 생성"""
-    api_key = os.environ.get("OPENAI_API_KEY")
-    if not api_key:
-        return "❌ OPENAI_API_KEY가 설정되어 있지 않습니다."
-
+def post_generator(state: State) -> dict:
+    """
+    📄 GPT-4o-mini 모델을 사용하여 LinkedIn 포스트 텍스트를 생성합니다.
+    - 전문적이면서도 자연스러운 톤으로 작성
+    - 해시태그와 이모지를 포함
+    """
     try:
-        client = OpenAI(api_key=api_key)
-        response = client.images.generate(
-            model="gpt-image-1",
-            prompt=prompt,
-            size="1024x1024",
-            n=1,
-        )
+        # 🧩 프롬프트 템플릿 정의
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", "당신은 전문적인 LinkedIn 콘텐츠 작가입니다. "
+                       "짧지만 영감을 주는 문체로 작성하며, 적절한 해시태그와 이모지를 포함합니다."),
+            ("human", "다음 주제에 대해 LinkedIn 포스트를 작성해 주세요:\n{topic}")
+        ])
 
-        data = response.data[0]
-        image_url = getattr(data, "url", None)
-        b64 = getattr(data, "b64_json", None)
+        # ⚙️ LLM 초기화
+        llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.6)
 
-        ensure_outputs()
-        image_name = f"image_{uuid.uuid4().hex[:8]}.png"
-        image_path = os.path.join("outputs/images", image_name)
+        # 🪄 프롬프트 → 모델 체인 구성
+        chain = prompt | llm
 
-        if image_url:
-            img_data = requests.get(image_url).content
-            with open(image_path, "wb") as f:
-                f.write(img_data)
-            return image_path
-        elif b64:
-            with open(image_path, "wb") as f:
-                f.write(base64.b64decode(b64))
-            return image_path
-        else:
-            return "❌ 이미지 생성 실패: 응답이 비정상적입니다."
-
-    except Exception as e:
-        return f"❌ 이미지 생성 오류: {e}"
-
-
-# ============================================================
-# 4️⃣ LangGraph 노드 정의
-# ============================================================
-post_prompt = ChatPromptTemplate.from_messages([
-    ("system", "당신은 전문 LinkedIn 콘텐츠 작가입니다. "
-               "글은 전문적이면서도 친근한 톤으로 작성하며, 이모지와 해시태그를 포함해야 합니다."),
-    ("human", "다음 주제에 대해 LinkedIn 포스트를 작성해 주세요:\n{topic}")
-])
-post_chain = post_prompt | llm
-
-
-def post_node(state: State) -> dict:
-    """GPT-4o를 사용해 LinkedIn 포스트 텍스트를 생성"""
-    try:
-        response = post_chain.invoke({"topic": state["topic"]})
+        # 🧠 포스트 생성
+        response = chain.invoke({"topic": state["topic"]})
         return {"post_text": response.content.strip(), "error": ""}
+
     except Exception as e:
+        # ❌ 예외 처리
         return {"post_text": "", "error": f"포스트 생성 오류: {e}"}
 
 
-def image_gen_node(state: State) -> dict:
-    """생성된 포스트를 기반으로 DALL·E 이미지를 생성"""
+# ============================================================
+# 4️⃣ 이미지 생성 노드 (OpenAI DALL·E 3)
+# ============================================================
+def image_generator(state: State) -> dict:
+    """
+    🎨 OpenAI Images API를 사용하여 포스트에 어울리는 이미지를 생성합니다.
+    GPT-4o가 작성한 텍스트 내용을 바탕으로 프롬프트를 생성합니다.
+    """
     try:
-        tools = [generate_image_tool]
-        agent_prompt = ChatPromptTemplate.from_messages([
-            ("system", "당신은 시각적으로 매력적인 LinkedIn 이미지를 설계하는 전문가입니다. "
-                       "'image_generator' 도구만 사용할 수 있습니다. "
-                       "결과는 반드시 'Final Answer: [이미지 경로]' 형태로 응답하세요."),
-            ("human", "다음 포스트 내용을 기반으로 이미지를 생성하세요:\n{input}"),
-            MessagesPlaceholder(variable_name="agent_scratchpad"),
-        ])
+        # 🔑 API 클라이언트 초기화
+        client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
 
-        agent = create_openai_functions_agent(llm=llm, tools=tools, prompt=agent_prompt)
-        executor = AgentExecutor(agent=agent, tools=tools, verbose=False)
-        resp = executor.invoke({"input": state["post_text"]})
+        # 📷 프롬프트 작성
+        prompt = f"Generate a visually appealing image suitable for a LinkedIn post about: {state['topic']}"
 
-        output_text = resp.get("output", "") if isinstance(resp, dict) else str(resp)
-        match = re.search(r"Final Answer:\s*(.+)", output_text, re.DOTALL)
-        final_output = match.group(1).strip() if match else output_text.strip()
+        # 🧩 이미지 생성 요청
+        response = client.images.generate(
+            model="gpt-image-1",
+            prompt=prompt,
+            size="1024x1024"
+        )
 
-        if "outputs/images" in final_output or final_output.endswith(".png"):
-            return {"image_path": final_output, "error": ""}
+        # 📁 이미지 저장 경로 지정
+        data = response.data[0]
+        image_path = os.path.join("outputs/images", f"image_{uuid.uuid4().hex[:8]}.png")
+
+        # 🔄 base64 또는 URL 기반 데이터 저장
+        if getattr(data, "b64_json", None):
+            with open(image_path, "wb") as f:
+                f.write(base64.b64decode(data.b64_json))
+        elif getattr(data, "url", None):
+            img_data = requests.get(data.url).content
+            with open(image_path, "wb") as f:
+                f.write(img_data)
         else:
-            return {"image_path": "", "error": final_output or "이미지 생성 실패"}
+            return {"image_path": "", "error": "이미지 생성 실패: 응답 데이터 없음"}
+
+        return {"image_path": image_path, "error": ""}
 
     except Exception as e:
-        return {"image_path": "", "error": f"이미지 노드 오류: {e}"}
+        return {"image_path": "", "error": f"이미지 생성 오류: {e}"}
 
 
 # ============================================================
-# 5️⃣ 그래프 구성 및 실행
+# 5️⃣ LangGraph 그래프 구성
 # ============================================================
 def build_graph():
-    """LangGraph 그래프 구성"""
+    """
+    LangGraph를 이용해 전체 워크플로우를 구성합니다.
+    [START] → [포스트 생성] → [이미지 생성] → [END]
+    """
     graph = StateGraph(State)
-    graph.add_node("post", post_node)
-    graph.add_node("image_gen", image_gen_node)
+    graph.add_node("post", post_generator)
+    graph.add_node("image", image_generator)
     graph.add_edge(START, "post")
-    graph.add_edge("post", "image_gen")
-    graph.add_edge("image_gen", END)
+    graph.add_edge("post", "image")
+    graph.add_edge("image", END)
     return graph.compile()
 
 
+# ============================================================
+# 6️⃣ 전체 워크플로우 실행 로직
+# ============================================================
 def run_workflow(initial_state: dict, progress_callback=None) -> dict:
-    """전체 워크플로우를 실행"""
-    state: State = State(topic=initial_state.get("topic", ""), post_text="", image_path="", error="")
+    """
+    💡 전체 프로세스를 순차적으로 실행합니다.
+    1️⃣ 포스트 작성 → 2️⃣ 이미지 생성 → 3️⃣ 메타데이터 저장
+    """
+    ensure_outputs()
+    state: State = State(topic=initial_state.get("topic", ""),
+                         post_text="", image_path="", error="")
 
     try:
+        # 1️⃣ 포스트 생성
         if progress_callback:
             progress_callback(10, "포스트 생성 중...")
+        post_out = post_generator(state)
+        state["post_text"] = post_out["post_text"]
 
-        post_out = post_node(state)
-        state["post_text"] = post_out.get("post_text", "")
-        if post_out.get("error"):
+        if post_out["error"]:
             state["error"] = post_out["error"]
-            save_post_metadata(state["topic"], state["post_text"], "", state["error"])
+            save_metadata(state["topic"], state["post_text"], "", state["error"])
             return state
 
+        # 2️⃣ 이미지 생성
         if progress_callback:
             progress_callback(50, "이미지 생성 중...")
+        img_out = image_generator(state)
+        state["image_path"] = img_out["image_path"]
+        state["error"] = img_out["error"]
 
-        img_out = image_gen_node(state)
-        state["image_path"] = img_out.get("image_path", "")
-        state["error"] = img_out.get("error", "")
+        # 3️⃣ 결과 저장
+        save_metadata(state["topic"], state["post_text"], state["image_path"], state["error"])
 
-        save_post_metadata(state["topic"], state["post_text"], state["image_path"], state["error"])
         if progress_callback:
-            progress_callback(100, "완료.")
+            progress_callback(100, "워크플로우 완료.")
         return state
 
     except Exception as e:
         state["error"] = f"워크플로우 오류: {e}"
-        save_post_metadata(state["topic"], state["post_text"], state["image_path"], state["error"])
-        if progress_callback:
-            progress_callback(100, "실패.")
+        save_metadata(state["topic"], state["post_text"], state["image_path"], state["error"])
         return state
 
 
 # ============================================================
-# 6️⃣ Mermaid 다이어그램 (시각화용)
+# 7️⃣ Mermaid 다이어그램 (시각화용)
 # ============================================================
 def mermaid_diagram() -> str:
-    """워크플로우 구조를 Mermaid 다이어그램으로 반환"""
+    """
+    전체 워크플로우를 Mermaid 다이어그램 형태로 반환합니다.
+    Streamlit에서 시각화할 때 사용됩니다.
+    """
     return """```mermaid
 flowchart LR
-    START --> Post[포스트 생성 노드\\n(GPT-4o)]
-    Post --> Image[이미지 생성 노드\\n(DALL·E-3)]
-    Image --> END
+    START --> POST[포스트 생성 ✍️]
+    POST --> IMAGE[이미지 생성 🎨]
+    IMAGE --> END
 ```"""
