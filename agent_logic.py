@@ -9,8 +9,7 @@ from langgraph.graph import StateGraph, START, END
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_openai import ChatOpenAI
 from langchain.tools import tool
-from langchain.agents.runner import AgentExecutor
-from langchain.agents.openai_functions_agent.base import create_openai_functions_agent
+from langchain.agents import AgentExecutor, create_openai_functions_agent
 from openai import OpenAI
 import requests
 from dotenv import load_dotenv
@@ -303,4 +302,5 @@ flowchart LR
 ```"""
 
     return diagram
+
 
