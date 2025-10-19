@@ -5,7 +5,7 @@ This project demonstrates an intelligent AI agent built with **LangGraph** that 
 Demo:https://linkedin-postagent.streamlit.app/
 
 ## Key Features
-- **Two-Step Workflow:** Separates post generation (GPT-4) and image generation (DALL·E 3 via an Agent).
+- **Two-Step Workflow:** Separates post generation (GPT-4) and image generation (DALL·E 2 via an Agent).
 - **LangGraph Orchestration:** Utilizes a state machine for robust, step-by-step process management.
 - **Streamlit UI:** Provides an easy-to-use web interface.
 
@@ -30,4 +30,5 @@ AI_LinkedIn_Generator/
 └── outputs/
     └── posts/.gitkeep   # Storage for generated posts and images (결과물 저장소)
 ```
+
 
